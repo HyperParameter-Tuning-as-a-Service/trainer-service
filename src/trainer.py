@@ -1,25 +1,32 @@
-from transformers import AutoTokenizer, AutoModelForSequenceClassification, AutoModelForQuestionAnswering, DefaultDataCollator
-from transformers import AutoModelForMaskedLM, DataCollatorWithPadding, TrainingArguments, Trainer, AutoModelForSeq2SeqLM, DataCollatorForSeq2Seq
-from datasets import load_dataset, load_metric
-import pandas as pd
+from transformers import TrainingArguments, Trainer
+from datasets import load_metric
 import numpy as np
-import torch
-from torch.utils.data import DataLoader
-import json
-import ast
 import evaluate
+import subprocess
 
 class CustomTrainer():
     '''
     Trainer class for loading the trainer class in memory and running training, evaluation, and storing
     '''
-    def __init__(self, repo_name, hyperparameters_path, tokenizer, model, dataset) -> None:
+    def __init__(self, repo_name, hyperparameters, tokenizer, model, dataset) -> None:
         self.repo_name = repo_name
-        f = open(hyperparameters_path)
-        self.hyper = json.load(f)
+        self.hyper = hyperparameters
         self.model = model
         self.rouge = evaluate.load("rouge")
 
+        if "learning_rate" not in self.hyper:
+            self.hyper["learning_rate"] = 0.001
+        if "batch_size" not in self.hyper:
+            self.hyper["batch_size"] = 4
+        if "max_epochs" not in self.hyper:
+            self.hyper["max_epochs"] = 2
+        if "weight_decay" not in self.hyper:
+            self.hyper["weight_decay"] = 0.01
+        if "warmup_steps" not in self.hyper:
+            self.hyper["warmup_steps"] = 10
+
+        print(self.hyper)
+        
         self.training_args = TrainingArguments(
             output_dir=self.repo_name,
             learning_rate=self.hyper["learning_rate"],
@@ -27,9 +34,7 @@ class CustomTrainer():
             per_device_eval_batch_size=self.hyper["batch_size"],
             num_train_epochs=self.hyper["max_epochs"],
             weight_decay=self.hyper["weight_decay"],
-            warmup_steps=self.hyper["warmup_steps"],
-            save_strategy="epoch",
-            evaluation_strategy="epoch"
+            warmup_steps=self.hyper["warmup_steps"]
         )
 
         self.trainer = Trainer(
@@ -66,16 +71,24 @@ class CustomTrainer():
         return {k: round(v, 4) for k, v in result.items()}
 
     def train(self):
-        train_events = self.trainer.train()
-        print(train_events)
+        self.train_events = self.trainer.train()
+        print(self.train_events)
 
     def evaluate(self):
-        eval_events = self.trainer.evaluate()
-        print(eval_events)
+        self.eval_events = self.trainer.evaluate()
+        print(self.eval_events)
 
     def get_model(self):
         return self.model
 
-    def save(self, save_path, user_name):
-        self.model.save_pretrained(save_path + f"customer_model_{user_name}", from_pt=True)
+    def get_metrics_eval(self):
+        return self.eval_events
+
+    def save(self, save_path, repo_name):
+        save_folder_name = save_path + repo_name
+        self.model.save_pretrained(save_folder_name, from_pt=True)
         print("model saved")
+
+        args = ["zip", save_path + "/" + repo_name + ".zip", save_folder_name + "/*"]
+        subprocess.Popen(args)
+        print("model zipped")
