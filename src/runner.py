@@ -18,7 +18,7 @@ class trainEvalRunner():
     def __init__(self) -> None:
         self.connection = readWriteMinioKafka(reset=True)
         self.CONSUMER, self.PRODUCER, self.MINIO_CLIENT = self.connection.get_clients()
-        self.poll_to_run_service()
+        # self.poll_to_run_service()
 
     def poll_to_run_service(self):
         try:
